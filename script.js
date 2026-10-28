@@ -61,11 +61,7 @@ function loadProducts() {
       return JSON.parse(saved);
     }
 
-    localStorage.setItem(
-      PRODUCTS_KEY,
-      JSON.stringify(defaultProducts)
-    );
-
+    localStorage.setItem(PRODUCTS_KEY, JSON.stringify(defaultProducts));
     return defaultProducts;
   } catch (error) {
     console.error("Erreur de chargement des produits :", error);
@@ -88,6 +84,16 @@ function showToast(message) {
   window.papiToastTimer = setTimeout(() => {
     toast.classList.remove("show");
   }, 3000);
+}
+
+function escapeHTML(value) {
+  return String(value ?? "").replace(/[&<>"']/g, character => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[character]);
 }
 
 function renderProducts() {
@@ -136,16 +142,6 @@ function renderProducts() {
   });
 }
 
-function escapeHTML(value) {
-  return String(value ?? "").replace(/[&<>"']/g, character => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;"
-  })[character]);
-}
-
 function openOrder(product) {
   const existing = document.getElementById("order-modal");
   if (existing) existing.remove();
@@ -159,7 +155,7 @@ function openOrder(product) {
   `;
 
   modal.innerHTML = `
-    <form id="order-form" style="
+    <form id="order-form" autocomplete="off" style="
       background:#fff;color:#171717;width:100%;max-width:520px;
       padding:28px;border-top:5px solid #d5ad55;
       max-height:95vh;overflow-y:auto;
@@ -178,16 +174,18 @@ function openOrder(product) {
       </p>
 
       <label style="display:block;margin:12px 0 6px">Nom et prénom *</label>
-      <input name="fullName" required maxlength="100" autocomplete="name"
+      <input name="fullName" type="text" required maxlength="100"
+        autocomplete="off" autocapitalize="words" spellcheck="false"
         style="width:100%;padding:12px;border:1px solid #ddd">
 
       <label style="display:block;margin:12px 0 6px">Téléphone *</label>
-      <input name="phone" required type="tel" maxlength="20" autocomplete="tel"
+      <input name="phone" type="tel" required maxlength="20"
+        autocomplete="off" autocapitalize="off" spellcheck="false"
         placeholder="05 / 06 / 07..."
         style="width:100%;padding:12px;border:1px solid #ddd">
 
       <label style="display:block;margin:12px 0 6px">Wilaya *</label>
-      <select name="wilaya" required
+      <select name="wilaya" required autocomplete="off"
         style="width:100%;padding:12px;border:1px solid #ddd">
         <option value="">Choisir votre wilaya</option>
         ${[
@@ -203,17 +201,21 @@ function openOrder(product) {
           "Ouled Djellal","Béni Abbès","In Salah","In Guezzam",
           "Touggourt","Djanet","El M'Ghair","El Meniaa"
         ].map((wilaya, index) => `
-          <option value="${index + 1}">${String(index + 1).padStart(2, "0")} — ${wilaya}</option>
+          <option value="${index + 1}">
+            ${String(index + 1).padStart(2, "0")} — ${wilaya}
+          </option>
         `).join("")}
       </select>
 
       <label style="display:block;margin:12px 0 6px">Adresse exacte *</label>
-      <textarea name="address" required maxlength="300" autocomplete="street-address"
+      <textarea name="address" required maxlength="300"
+        autocomplete="off" autocapitalize="sentences" spellcheck="false"
         placeholder="Commune, quartier, rue, numéro..."
         style="width:100%;padding:12px;border:1px solid #ddd;min-height:90px;resize:vertical"></textarea>
 
       <label style="display:block;margin:12px 0 6px">Quantité</label>
       <input name="quantity" type="number" min="1" max="20" value="1" required
+        autocomplete="off"
         style="width:100%;padding:12px;border:1px solid #ddd">
 
       <p style="margin-top:16px;font-weight:bold">
@@ -237,6 +239,13 @@ function openOrder(product) {
   const quantity = form.elements.quantity;
   const total = modal.querySelector("#order-total");
 
+  // Vide les champs texte à chaque ouverture.
+  form.elements.fullName.value = "";
+  form.elements.phone.value = "";
+  form.elements.wilaya.value = "";
+  form.elements.address.value = "";
+  quantity.value = "1";
+
   quantity.addEventListener("input", () => {
     const amount = Math.min(20, Math.max(1, Number(quantity.value) || 1));
     total.textContent = formatPrice(Number(product.price) * amount);
@@ -252,23 +261,33 @@ function openOrder(product) {
     event.preventDefault();
 
     const data = new FormData(form);
+    const amount = Number(data.get("quantity"));
+
     const order = {
       id: Date.now(),
       productId: product.id,
       productName: product.name,
       unitPrice: Number(product.price),
-      quantity: Number(data.get("quantity")),
-      total: Number(product.price) * Number(data.get("quantity")),
-      fullName: String(data.get("fullName")).trim(),
-      phone: String(data.get("phone")).trim(),
-      wilayaCode: String(data.get("wilaya")),
-      address: String(data.get("address")).trim(),
+      quantity: amount,
+      total: Number(product.price) * amount,
+      fullName: String(data.get("fullName") || "").trim(),
+      phone: String(data.get("phone") || "").trim(),
+      wilayaCode: String(data.get("wilaya") || ""),
+      address: String(data.get("address") || "").trim(),
       status: "Nouvelle",
       createdAt: new Date().toISOString()
     };
 
-    if (!order.fullName || !order.phone || !order.wilayaCode || !order.address) {
-      showToast("Veuillez remplir tous les champs obligatoires.");
+    if (
+      !order.fullName ||
+      !order.phone ||
+      !order.wilayaCode ||
+      !order.address ||
+      !Number.isInteger(amount) ||
+      amount < 1 ||
+      amount > 20
+    ) {
+      showToast("Veuillez remplir correctement tous les champs obligatoires.");
       return;
     }
 
@@ -279,7 +298,8 @@ function openOrder(product) {
 
       modal.remove();
       showToast("Commande enregistrée sur cet appareil !");
-    } catch {
+    } catch (error) {
+      console.error("Erreur d'enregistrement :", error);
       showToast("Impossible d'enregistrer. Vérifiez le stockage du navigateur.");
     }
   });
