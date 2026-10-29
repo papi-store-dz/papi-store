@@ -54,7 +54,9 @@ function formatPrice(value) {
 
 function formatDate(value) {
   const date = value?.toDate ? value.toDate() : new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("fr-FR");
+  return Number.isNaN(date.getTime())
+    ? "—"
+    : date.toLocaleString("fr-FR");
 }
 
 function getWilayaName(value) {
@@ -109,6 +111,7 @@ async function loadData() {
 function showAdmin() {
   $("#login-screen").hidden = true;
   $("#admin-app").hidden = false;
+
   loadData().catch(error => {
     console.error("Erreur de chargement Firebase :", error);
     notify("Impossible de charger les données. Vérifiez les règles Firestore.");
@@ -254,6 +257,7 @@ function renderProductsTable() {
       const product = products.find(
         item => item.firestoreId === button.dataset.editProduct
       );
+
       if (product) openProductForm(product);
     });
   });
@@ -470,7 +474,7 @@ function renderOrdersMarkup(list, compact = false) {
           <th>CLIENT</th>
           <th>PRODUIT</th>
           <th>TOTAL</th>
-          ${compact ? "" : "<th>CONTACT / ADRESSE</th><th>STATUT</th>"}
+          ${compact ? "" : "<th>CONTACT / ADRESSE</th><th>STATUT</th><th>ACTIONS</th>"}
           <th>DATE</th>
         </tr>
       </thead>
@@ -505,6 +509,14 @@ function renderOrdersMarkup(list, compact = false) {
                     `).join("")}
                 </select>
               </td>
+              <td>
+                <button
+                  type="button"
+                  class="action-button delete-button"
+                  data-delete-order="${escapeHTML(order.firestoreId || "")}">
+                  Supprimer
+                </button>
+              </td>
             `}
             <td>${formatDate(order.createdAt)}</td>
           </tr>
@@ -535,6 +547,41 @@ function renderOrdersTable() {
       } catch (error) {
         console.error(error);
         notify("Impossible de modifier le statut. Vérifiez les règles Firestore.");
+      }
+    });
+  });
+
+  $("#admin-orders").querySelectorAll("[data-delete-order]").forEach(button => {
+    button.addEventListener("click", async () => {
+      const id = button.dataset.deleteOrder;
+      const order = orders.find(item => item.firestoreId === id);
+
+      if (!currentUser || !order || !id) {
+        notify("Commande introuvable.");
+        return;
+      }
+
+      const confirmed = confirm(
+        `Supprimer définitivement cette commande ?\n\n` +
+        `Client : ${order.fullName || "Non précisé"}\n` +
+        `Produit : ${order.productName || "Non précisé"}\n` +
+        `Total : ${formatPrice(order.total)}`
+      );
+
+      if (!confirmed) return;
+
+      button.disabled = true;
+      button.textContent = "Suppression...";
+
+      try {
+        await deleteDoc(doc(db, "orders", id));
+        await loadData();
+        notify("Commande supprimée.");
+      } catch (error) {
+        console.error("Erreur de suppression :", error);
+        button.disabled = false;
+        button.textContent = "Supprimer";
+        notify("Suppression impossible. Vérifiez les règles Firestore.");
       }
     });
   });
